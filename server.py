@@ -9,51 +9,50 @@ app = Flask(__name__)
 CORS(app)  # تمكين CORS
 
 # استخدام مفتاح API من متغير البيئة
-genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+    print("✅ Gemini API configured successfully")
+else:
+    print("❌ GEMINI_API_KEY not found")
 
 # تخزين المحادثات
 chat_sessions = {}
 
 # prompt النظام
-SYSTEM_PROMPT = """
-أنت مساعد باسم "LUKU AI"، مختص بالكامل في الألعاب، الألغاز، الأسئلة المنطقية.
+SYSTEM_PROMPT = """أنت مساعد باسم "LUKU AI"، مختص بالكامل في الألعاب، الألغاز، الأسئلة المنطقية.
 إذا سُئلت عن شيء خارج هذا المجال، اكتب: "عذرًا أنا مساعد LUKU AI مختص في الألعاب والألغاز فقط."
 كن مرحًا وابتكر ألغاز وأسئلة ذكاء ممتعة، استخدم الإيموجيات بشكل مناسب.
-قدم الألغاز بناءً على المجال ومستوى الصعوبة المحدد.
-"""
+قدم الألغاز بناءً على المجال ومستوى الصعوبة المحدد."""
 
-# إنشاء أو استرجاع جلسة محادثة
-def get_chat_session(session_id, category="", level=""):
-    if session_id not in chat_sessions:
-        try:
-            # إنشاء نموذج جديد
-            model = genai.GenerativeModel('gemini-pro')
-           
-            # بدء محادثة جديدة مع تعليمات النظام
-            chat = model.start_chat(history=[])
-           
-            chat_sessions[session_id] = {
-                'chat': chat,
-                'category': category,
-                'level': level,
-                'history': []
-            }
-           
-            # إرسال رسالة الترحيب الأولى
-            welcome_message = f"{SYSTEM_PROMPT}\n\nالمجال: {category}\nمستوى الصعوبة: {level}"
-            response = chat.send_message(welcome_message)
-           
-        except Exception as e:
-            print(f"Session creation error: {e}")
-            # إنشاء جلسة افتراضية في حالة الخطأ
-            chat_sessions[session_id] = {
-                'chat': None,
-                'category': category,
-                'level': level,
-                'history': []
-            }
-   
-    return chat_sessions[session_id]
+def get_gemini_response(message, category="", level=""):
+    """الحصول على رد من Gemini AI"""
+    try:
+        if not GEMINI_API_KEY:
+            return "❌ خطأ: مفتاح API غير مضبوط. يرجى إضافة GEMINI_API_KEY في إعدادات Railway."
+        
+        # إنشاء النموذج
+        model = genai.GenerativeModel('gemini-pro')
+        
+        # إعداد الرسالة مع التعليمات
+        full_message = f"""
+        {SYSTEM_PROMPT}
+        
+        المجال: {category}
+        مستوى الصعوبة: {level}
+        
+        رسالة المستخدم: {message}
+        
+        قم بالرد بلغة العربية وبشكل مرح وجذاب مع الإيموجيات المناسبة:
+        """
+        
+        # إرسال الرسالة
+        response = model.generate_content(full_message)
+        return response.text
+        
+    except Exception as e:
+        print(f"Gemini API Error: {str(e)}")
+        return f"🧩 عذرًا، حدث خطأ في خدمة الألغاز: {str(e)}. جرب مرة أخرى لاحقًا!"
 
 # مسار للدردشة
 @app.route('/chat', methods=['POST'])
@@ -62,8 +61,8 @@ def chat():
         data = request.get_json()
         message = data.get('message', '')
         session_id = data.get('sessionId', 'default')
-        category = data.get('category', '')
-        level = data.get('level', '')
+        category = data.get('category', 'عام')
+        level = data.get('level', 'متوسط')
        
         if not message:
             return jsonify({
@@ -71,21 +70,21 @@ def chat():
                 'message': 'الرسالة مطلوبة'
             }), 400
         
-        session = get_chat_session(session_id, category, level)
-        session['history'].append({'role': 'user', 'content': message})
-       
-        # إرسال الرسالة إلى Gemini AI
-        try:
-            if session['chat']:
-                response = session['chat'].send_message(message)
-                reply = response.text
-            else:
-                reply = f"🧩 مرحبًا! هذا رد تجريبي من LUKU AI. أنت كتبت: '{message}'. في النسخة الكاملة، سأقدم ألغازاً ممتعة في مجال {category} بمستوى {level}!"
-        except Exception as e:
-            print(f"Gemini API Error: {e}")
-            reply = "🧩 عذرًا، حدث خطأ في الاتصال بخدمة الألغاز. جرب مرة أخرى لاحقًا!"
-       
-        session['history'].append({'role': 'assistant', 'content': reply})
+        # الحصول على الرد من Gemini
+        reply = get_gemini_response(message, category, level)
+        
+        # حفظ في السجل
+        if session_id not in chat_sessions:
+            chat_sessions[session_id] = {
+                'history': [],
+                'category': category,
+                'level': level
+            }
+        
+        chat_sessions[session_id]['history'].append({
+            'user': message,
+            'assistant': reply
+        })
        
         return jsonify({
             'success': True,
@@ -94,96 +93,39 @@ def chat():
         })
        
     except Exception as err:
-        print("Error in /chat endpoint:", err)
-       
-        # معالجة أنواع مختلفة من الأخطاء
-        error_message = "حدث خطأ أثناء معالجة طلبك"
-       
-        if "API_KEY" in str(err):
-            error_message = "مفتاح API غير صالح أو غير موجود"
-        elif "network" in str(err):
-            error_message = "خطأ في الاتصال بالشبكة"
-       
+        print("Error in /chat endpoint:", str(err))
         return jsonify({
             'error': True,
-            'message': error_message
+            'message': f'حدث خطأ في الخادم: {str(err)}'
         }), 500
 
-# مسار لإنشاء جلسة جديدة
-@app.route('/session/new', methods=['POST'])
-def new_session():
+# مسار لاختبار الاتصال بـ Gemini
+@app.route('/test-gemini', methods=['GET'])
+def test_gemini():
+    """لاختبار اتصال Gemini AI"""
     try:
-        data = request.get_json()
-        category = data.get('category', '')
-        level = data.get('level', '')
-       
-        session_id = f"session_{uuid.uuid4().hex}"
-       
-        # إنشاء جلسة جديدة
-        get_chat_session(session_id, category, level)
-       
-        return jsonify({
-            'success': True,
-            'sessionId': session_id,
-            'message': 'تم إنشاء جلسة جديدة بنجاح'
-        })
-       
-    except Exception as err:
-        print("Error in /session/new endpoint:", err)
-        return jsonify({
-            'error': True,
-            'message': 'حدث خطأ أثناء إنشاء الجلسة'
-        }), 500
-
-# مسار للحصول على تاريخ المحادثة
-@app.route('/history/<session_id>', methods=['GET'])
-def get_history(session_id):
-    try:
-        if session_id not in chat_sessions:
+        if not GEMINI_API_KEY:
             return jsonify({
-                'error': True,
-                'message': 'الجلسة غير موجودة'
-            }), 404
-       
-        session = chat_sessions[session_id]
-       
-        return jsonify({
-            'success': True,
-            'history': session['history'],
-            'category': session['category'],
-            'level': session['level']
-        })
-       
-    except Exception as err:
-        print("Error in /history endpoint:", err)
-        return jsonify({
-            'error': True,
-            'message': 'حدث خطأ أثناء جلب التاريخ'
-        }), 500
-
-# مسار لحذف جلسة
-@app.route('/session/<session_id>', methods=['DELETE'])
-def delete_session(session_id):
-    try:
-        if session_id in chat_sessions:
-            del chat_sessions[session_id]
-           
-            return jsonify({
-                'success': True,
-                'message': 'تم حذف الجلسة بنجاح'
+                'success': False,
+                'message': '❌ GEMINI_API_KEY غير مضبوط'
             })
-        else:
-            return jsonify({
-                'error': True,
-                'message': 'الجلسة غير موجودة'
-            }), 404
-           
-    except Exception as err:
-        print("Error in /session endpoint:", err)
+        
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content("قل 'مرحبًا من LUKU AI' بالعربية فقط بدون أي شرح إضافي")
+        
         return jsonify({
-            'error': True,
-            'message': 'حدث خطأ أثناء حذف الجلسة'
-        }), 500
+            'success': True,
+            'message': '✅ اتصال Gemini ناجح',
+            'response': response.text,
+            'api_key_exists': bool(GEMINI_API_KEY)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'❌ فشل اتصال Gemini: {str(e)}',
+            'api_key_exists': bool(GEMINI_API_KEY)
+        })
 
 # مسار رئيسي لخدمة الموقع
 @app.route('/')
@@ -195,25 +137,17 @@ def serve_html():
     except Exception as e:
         return f"Error loading HTML file: {str(e)}", 500
 
-# مسار لاختبار API
-@app.route('/test')
-def test_api():
-    try:
-        # اختبار اتصال Gemini
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content("Say 'Hello' in Arabic")
-        return jsonify({'success': True, 'message': response.text})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-# middleware للتعامل مع المسارات غير المعرفة
-@app.errorhandler(404)
-def not_found(error):
+# مسار لفحص حالة الخادم
+@app.route('/health')
+def health_check():
     return jsonify({
-        'error': True,
-        'message': 'مسار غير موجود'
-    }), 404
+        'status': '✅ الخادم يعمل',
+        'gemini_configured': bool(GEMINI_API_KEY),
+        'sessions_active': len(chat_sessions)
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 3000))
+    print(f"🚀 Starting LUKU AI Server on port {port}")
+    print(f"🔑 Gemini API Key: {'✅ Found' if GEMINI_API_KEY else '❌ Missing'}")
     app.run(host='0.0.0.0', port=port, debug=False)
