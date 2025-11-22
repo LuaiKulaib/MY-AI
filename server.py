@@ -32,7 +32,7 @@ def get_gemini_response(message, category="", level=""):
             return "❌ خطأ: مفتاح API غير مضبوط. يرجى إضافة GEMINI_API_KEY في إعدادات Railway."
         
         # إنشاء النموذج
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         # إعداد الرسالة مع التعليمات
         full_message = f"""
