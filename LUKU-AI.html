@@ -228,7 +228,7 @@
 
         .msg {
           display: grid;
-          grid-template-columns: 36px 1fr;
+          grid-template-columns: 36px 1fr auto;
           gap: 12px;
           align-items: flex-start;
           width: 100%;
@@ -262,7 +262,8 @@
           white-space: pre-wrap;
           word-wrap: break-word;
           line-height: 1.5;
-          max-width: 80%;
+          max-width: 100%;
+          flex: 1;
         }
 
         .msg.user {
@@ -278,6 +279,37 @@
           background: var(--brand);
           color: #00111a;
           border: none;
+        }
+
+        /* زر النسخ لكل رسالة */
+        .copy-btn {
+          background: transparent;
+          border: 1px solid var(--border);
+          color: var(--muted);
+          padding: 6px 8px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: var(--transition);
+          font-size: 12px;
+          opacity: 0;
+          visibility: hidden;
+        }
+
+        .msg:hover .copy-btn {
+          opacity: 1;
+          visibility: visible;
+        }
+
+        .copy-btn:hover {
+          border-color: var(--brand);
+          color: var(--brand);
+          background: rgba(34, 211, 238, 0.1);
+        }
+
+        .copy-btn.copied {
+          background: var(--success);
+          border-color: var(--success);
+          color: white;
         }
 
         .typing-indicator {
@@ -431,7 +463,9 @@
           border-inline-end: 1px solid var(--border);
         }
 
-        /* تحسينات للاستجابة على الأجهزة المحمولة */
+        /* === تحسينات الاستجابة للشاشات المختلفة === */
+        
+        /* للأجهزة اللوحية (768px فأقل) */
         @media (max-width: 768px) {
           #app {
             grid-template-columns: 1fr;
@@ -442,8 +476,8 @@
             top: 0;
             right: 0;
             bottom: 0;
-            width: 220px;
-            z-index: 100;
+            width: 280px;
+            z-index: 1000;
             transform: translateX(100%);
             transition: transform 0.3s ease;
           }
@@ -459,7 +493,7 @@
             bottom: 0;
             left: 0;
             background: rgba(0, 0, 0, 0.5);
-            z-index: 99;
+            z-index: 999;
             display: none;
           }
        
@@ -472,27 +506,146 @@
             position: fixed;
             top: 16px;
             right: 16px;
-            z-index: 101;
+            z-index: 1001;
             background: var(--card);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 8px;
+            padding: 8px 12px;
             cursor: pointer;
+            font-size: 18px;
           }
-       
+
+          .msg {
+            grid-template-columns: 32px 1fr auto;
+            gap: 8px;
+          }
+
+          .msg .avatar {
+            width: 32px;
+            height: 32px;
+            font-size: 14px;
+          }
+
+          .copy-btn {
+            opacity: 1;
+            visibility: visible;
+            padding: 4px 6px;
+            font-size: 11px;
+          }
+
+          .chat-header {
+            padding: 10px 12px;
+          }
+
+          .name {
+            font-size: 16px;
+          }
+
+          .subtitle {
+            font-size: 12px;
+          }
+
+          .welcome h1 {
+            font-size: 1.5rem;
+          }
+
+          .suggestions {
+            gap: 6px;
+          }
+
+          .chip {
+            padding: 8px 12px;
+            font-size: 13px;
+          }
+        }
+
+        /* للهواتف المحمولة (480px فأقل) */
+        @media (max-width: 480px) {
+          .main {
+            grid-template-rows: auto 1fr auto;
+          }
+
+          .chat {
+            padding: 12px;
+            gap: 12px;
+          }
+
+          .msg {
+            grid-template-columns: 28px 1fr auto;
+            gap: 6px;
+          }
+
+          .msg .avatar {
+            width: 28px;
+            height: 28px;
+            font-size: 12px;
+          }
+
+          .msg .bubble {
+            padding: 10px 12px;
+            font-size: 14px;
+          }
+
+          .copy-btn {
+            padding: 3px 5px;
+            font-size: 10px;
+          }
+
+          .composer {
+            padding: 12px;
+          }
+
+          .input-wrap {
+            grid-template-columns: 1fr;
+            gap: 8px;
+            padding: 10px;
+          }
+
+          .controls {
+            grid-column: 1;
+            justify-content: space-between;
+          }
+
+          .welcome {
+            padding: 16px;
+          }
+
+          .welcome h1 {
+            font-size: 1.3rem;
+            margin-bottom: 12px;
+          }
+
           .suggestions, .levels {
             flex-direction: column;
             align-items: stretch;
+            gap: 6px;
           }
-       
+
+          .chip, .levels button {
+            width: 100%;
+            text-align: center;
+          }
+
+          .mobile-menu-btn {
+            top: 12px;
+            right: 12px;
+            padding: 6px 10px;
+            font-size: 16px;
+          }
+
+          .sidebar {
+            width: 100%;
+          }
+        }
+
+        /* للشاشات الكبيرة جداً (1200px فما فوق) */
+        @media (min-width: 1200px) {
+          .msg {
+            max-width: 1000px;
+          }
+
           .input-wrap {
-            grid-template-columns: 1fr auto;
-          }
-       
-          .controls {
-            grid-column: 1 / -1;
-            justify-content: flex-end;
-            margin-top: 8px;
+            max-width: 1000px;
           }
         }
 
@@ -549,12 +702,32 @@
         .chat::-webkit-scrollbar-thumb:hover {
           background: var(--muted);
         }
+
+        /* تحسينات للوضع الأفقي على الهواتف */
+        @media (max-height: 500px) and (orientation: landscape) {
+          .main {
+            grid-template-rows: auto 1fr auto;
+          }
+
+          .chat-header {
+            padding: 8px 12px;
+          }
+
+          .chat {
+            padding: 8px 12px;
+            gap: 8px;
+          }
+
+          .composer {
+            padding: 8px 12px;
+          }
+        }
     </style>
 </head>
 <body class="theme-dark">
     <div id="app">
         <!-- زر القائمة للأجهزة المحمولة -->
-        <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="فتح القائمة">
+        <button id="mobile-menu-btn" class="mobile-menu-btn" aria-label="فتح القائمة" style="display: none;">
             <span>☰</span>
         </button>
       
@@ -613,7 +786,6 @@
                 <div class="input-wrap">
                     <textarea id="input" rows="1" placeholder="اكتب رسالتك… (Enter للإرسال / Shift+Enter لسطر جديد)" aria-label="رسالتك"></textarea>
                     <div class="controls">
-                        <button id="copy-last" class="icon-btn" title="نسخ آخر رد">📋</button>
                         <button id="send" class="btn primary">إرسال</button>
                     </div>
                 </div>
@@ -648,7 +820,6 @@
             toggleThemeBtn: document.getElementById("toggle-theme"),
             themeIcon: document.getElementById("theme-icon"),
             clearChatBtn: document.getElementById("clear-chat"),
-            copyLastBtn: document.getElementById("copy-last"),
             mobileMenuBtn: document.getElementById("mobile-menu-btn"),
             sidebar: document.getElementById("sidebar"),
             sidebarOverlay: document.getElementById("sidebar-overlay"),
@@ -787,10 +958,28 @@
             msgDiv.innerHTML = `
                 <div class="avatar">${avatar}</div>
                 <div class="bubble ${bubbleClass}">${text}</div>
+                ${sender === 'bot' ? '<button class="copy-btn" title="نسخ الرسالة">📋</button>' : ''}
             `;
           
             elements.chatBox.appendChild(msgDiv);
             elements.chatBox.scrollTop = elements.chatBox.scrollHeight;
+
+            // إضافة حدث النسخ لرسائل البوت فقط
+            if (sender === 'bot') {
+                const copyBtn = msgDiv.querySelector('.copy-btn');
+                copyBtn.addEventListener('click', () => {
+                    const messageText = msgDiv.querySelector('.bubble').textContent;
+                    copyToClipboard(messageText);
+                    
+                    // تغيير مظهر الزر مؤقتاً للإشارة إلى النسخ
+                    copyBtn.textContent = '✅';
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => {
+                        copyBtn.textContent = '📋';
+                        copyBtn.classList.remove('copied');
+                    }, 2000);
+                });
+            }
         }
 
         function showTypingIndicator() {
@@ -909,6 +1098,20 @@
             }
         }
 
+        // === التحقق من حجم الشاشة ===
+        function checkScreenSize() {
+            if (window.innerWidth <= 768) {
+                elements.mobileMenuBtn.style.display = 'block';
+                elements.sidebar.classList.remove('open');
+                elements.sidebarOverlay.classList.remove('open');
+            } else {
+                elements.mobileMenuBtn.style.display = 'none';
+                elements.sidebar.classList.remove('open');
+                elements.sidebarOverlay.classList.remove('open');
+                document.body.style.overflow = '';
+            }
+        }
+
         // === تكوين الأحداث ===
         function setupEventListeners() {
             // إرسال الرسائل
@@ -1000,30 +1203,13 @@
                 }
             });
           
-            elements.copyLastBtn.addEventListener('click', () => {
-                const lastBotMessage = document.querySelector('.msg.bot:last-child .bubble');
-                if (lastBotMessage) {
-                    copyToClipboard(lastBotMessage.textContent);
-                } else {
-                    showNotification('لا يوجد رد لنسخه', 'info');
-                }
-            });
-          
             // القائمة الجانبية للأجهزة المحمولة
             elements.mobileMenuBtn.addEventListener('click', toggleMobileMenu);
             elements.sidebarOverlay.addEventListener('click', toggleMobileMenu);
           
-            // إعادة تنظيم القائمة عند تغيير حجم النافذة
-            window.addEventListener('resize', () => {
-                if (window.innerWidth <= 768) {
-                    elements.mobileMenuBtn.style.display = 'block';
-                } else {
-                    elements.mobileMenuBtn.style.display = 'none';
-                    elements.sidebar.classList.remove('open');
-                    elements.sidebarOverlay.classList.remove('open');
-                    document.body.style.overflow = '';
-                }
-            });
+            // التحقق من حجم الشاشة عند التحميل وعند تغيير الحجم
+            window.addEventListener('load', checkScreenSize);
+            window.addEventListener('resize', checkScreenSize);
         }
 
         // === تهيئة التطبيق ===
@@ -1031,6 +1217,7 @@
             loadTheme();
             setupEventListeners();
             autoResizeTextarea(elements.input);
+            checkScreenSize();
           
             // عرض رسالة ترحيب عشوائية
             const welcomeMessages = [
