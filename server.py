@@ -6,89 +6,193 @@ import os
 import json
 import random
 from datetime import datetime, timedelta
+import hashlib
 
 # تهيئة تطبيق Flask
 app = Flask(__name__)
-CORS(app)  # تمكين CORS
+CORS(app)
 
 # استخدام مفتاح API من متغير البيئة
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    print("✅ Gemini API configured successfully")
+    print("🎉 LUKU ai جاهز لتوليد ألغاز فريدة!")
 else:
-    print("❌ GEMINI_API_KEY not found")
+    print("🤖 وضع التجربة - سيتم استخدام ألغاز متنوعة")
 
 # تخزين البيانات
 chat_sessions = {}
 user_profiles = {}
 leaderboard = {}
 achievements_db = {}
-special_events = {}
 
-# 🎯 البرومبت النهائي المتكامل
-SYSTEM_PROMPT = """
-أنت "LUKU AI" - مساعد الألغاز الذكي المتخصص. اسمك الثابت هو LUKU AI فقط.
+# 🎪 البرومبت المحسن لتوليد ألغاز فريدة
+DYNAMIC_PROMPT = """
+أنت "LUKU ai" - مساعد الألغاز الذكي الذي يبتكر ألغازاً فريدة!
 
-## 🎯 القواعد الأساسية:
-1. **ابدأ مباشرة بالألغاز** بعد اختيار المجال والمستوى
-2. **استخدم اسم LUKU AI فقط** - لا تستخدم "AI" أو "Al" أو أي اسم آخر
-3. **تجنب التكرار** - لا تكرر نفس الردود
-4. **تقدم في الألغاز** - اطرح لغزاً جديداً بعد كل إجابة
+## 🎯 مهمتك:
+1. **ابتكر ألغازاً جديدة** في كل مرة - لا تكرر الألغاز
+2. **تخصص الألغاز** حسب المجال والمستوى
+3. **اجعلها متنوعة**: ألغاز كلمات، صور ذهنية، منطق، رياضيات
+4. **استخدم مواضيع عصرية** ومرتبطة بالحياة اليومية
 
-## 📝 نمط الرد:
-- اكتب بالعربية الصحيحة بدون أخطاء إملائية
-- ابدأ بلغز مباشر بعد الترحيب
-- غير أساليب التشجيع والردود
-- استخدم الإيموجيات المناسبة
+## 📝 أمثلة لألغاز فريدة:
+- "ما هو التطبيق الذي تراه كل يوم لكنه لا يرى؟ (الجواب: التطبيق)"
+- "أختصر المسافات لكنني لا أتحرك، من أكون؟ (الجواب: الرسالة النصية)"
+- "أملك مفاتيح لكنني لا أفتح أقفالاً، ما أنا؟ (الجواب: لوحة المفاتيح)"
 
-## 🎮 مثال للبدء الصحيح:
-المستخدم يختار: [رياضة - خبير]
+## 🎮 نمط الرد:
+- ابدأ مباشرة بلغز فريد
+- لا تذكر أن اللغز جديد
+- حافظ على الإثارة والمرح
+- استخدم الإيموجيات المناسبة 🎯🤔🧠
 
-➤ **LUKU AI:** "مرحباً أيها الخبير! 🏆 لنبدأ بتحدي رياضي متقدم. اللغز الأول: في الملعب دائماً أراه، يتحكم باللعبة دون أن يلعب، من أكون؟ 🎯"
-
-➤ **انتظر إجابة المستخدم...**
-
-➤ **التقييم ثم اللغز التالي مباشرة**
-
-تذكر: أنت LUKU AI - مساعد الألغاز الذكي والمرح! 🎪
+المجال: {category}
+المستوى: {level}
 """
 
-# 🎯 مكتبة الألغاز المتخصصة
-PUZZLE_LIBRARY = {
+# 🎲 مكتبة قوالب الألغاز (بدلاً من ألغاز جاهزة)
+PUZZLE_TEMPLATES = {
     "رياضة": [
-        {"question": "في الملعب دائماً أراه، يتحكم باللعبة دون أن يلعب، من أكون؟", "answer": "الحكم"},
-        {"question": "أرضية خضراء، لاعبون يركضون، كرة تدور... أي رياضة هذه؟", "answer": "كرة القدم"},
-        {"question": "أرتفع عالياً كالطائر، وأسقط الكرة في السلة، من أكون؟", "answer": "لاعب كرة السلة"}
+        "في {sport_event} دائماً أكون {role} لكنني لا {action}، من أكون؟",
+        "أركل ولا أمشي، أطير ولا أجنح، في {sport_field} أعيش، ما أنا؟",
+        "عددنا {number} في الملعب، نتحرك كفريق واحد، من نحن؟"
     ],
     "ثقافة": [
-        {"question": "له أوراق وليس بشجرة، يروي قصصاً لا تنتهي، ما هو؟", "answer": "الكتاب"},
-        {"question": "أبكم وأصم لكني أحدثك بلغة العالم، فمن أكون؟", "answer": "الكتاب"},
-        {"question": "أسافر حول العالم وأنا في مكاني، ما أنا؟", "answer": "الطابع البريدي"}
+        "أقرأ من غير عيون، أحدث من غير لسان، في {place} أعيش، ما أنا؟",
+        "تجمعنا {material} لكننا نحكي قصص {theme}، من نحن؟",
+        "أسافر عبر {time_period} وأحمل حكايات {culture}، ما أنا؟"
     ],
     "منطق": [
-        {"question": "ما هو الشيء الذي كلما أخذت منه كبر؟", "answer": "الحفرة"},
-        {"question": "أخت خالك وليست خالتك، فمن تكون؟", "answer": "أمك"},
-        {"question": "يصعد وينزل ولا يتحرك من مكانه، ما هو؟", "answer": "السلم"}
+        "كلما {action} زاد {grow}، ما أنا؟",
+        "أملك {feature1} لكن لا {feature2}، ما أنا؟",
+        "أرى كل شيء من غير عيون، أعرف كل شيء من غير عقل، ما أنا؟"
+    ],
+    "دين": [
+        "في {islamic_event} كنا {role}، حملنا {message}، من نحن؟",
+        "نزلت في {place} وتحكي عن {islamic_story}، ما أنا؟",
+        "عددنا {number} وأتينا من {direction}، من نحن؟"
+    ],
+    "ترفيه": [
+        "أرقص على {platform} وأجلب {emotion}، من أكون؟",
+        "في {entertainment_place} أعيش، أضحك وأبكي من غير مشاعر، ما أنا؟",
+        "أملك {feature} لكنني لا {ability}، في عالم {media} أسكن، ما أنا؟"
     ]
 }
 
-# 🏆 نظام الإنجازات
-ACHIEVEMENTS = {
-    "first_blood": {"name": "أول خطوة 🩸", "desc": "حل أول لغز"},
-    "speed_demon": {"name": "سريع كالبرق ⚡", "desc": "الإجابة في أقل من 5 ثواني"},
-    "perfectionist": {"name": "مثالي ⭐", "desc": "10 إجابات صحيحة متتالية"},
-    "puzzle_master": {"name": "سيد الألغاز 🏆", "desc": "حل 50 لغزاً"},
-    "category_expert": {"name": "خبير المجالات 🎯", "desc": "إكمال جميع ألغاز مجال واحد"}
+# 🎯 مفردات ديناميكية لتوليد ألغاز فريدة
+DYNAMIC_VOCABULARY = {
+    "sport_event": ["المباراة", "الملعب", "المسابقة", "البطولة", "التدريب"],
+    "role": ["الحكم", "الهداف", "الحارس", "اللاعب", "المدرب", "الجمهور"],
+    "action": ["ألعب", "أركض", "أسجل", "أدافع", "أهاجم"],
+    "sport_field": ["ملعب كرة القدم", "صالة السلة", "حلبة السباحة", "ملعب التنس"],
+    "number": ["11", "7", "5", "22", "6", "9"],
+    "place": ["المكتبة", "المتحف", "المسرح", "المدرسة", "الجامعة"],
+    "material": ["الورق", "الحبر", "الطين", "الرخام", "الخشب"],
+    "theme": ["الحب", "المغامرة", "التاريخ", "العلم", "الخيال"],
+    "time_period": ["الزمن", "العصور", "القرون", "الأزمان"],
+    "culture": ["الماضي", "الحاضر", "المستقبل", "الحضارات"],
+    "action": ["أخذت منه", "استخدمته", "تخلصت منه", "نظرت إليه"],
+    "grow": ["كبر", "اتسع", "ازداد", "تعمق"],
+    "feature1": ["أجنحة", "عيون", "أرجل", "أيدي"],
+    "feature2": ["أطير", "أرى", "أمشي", "ألمس"],
+    "islamic_event": ["غزوة بدر", "فتح مكة", "الهجرة", "البداية"],
+    "islamic_story": ["الصبر", "الإيمان", "التضحية", "النصر"],
+    "direction": ["السماء", "الأرض", "المشرق", "المغرب"],
+    "platform": ["المسرح", "الشاشة", "المذياع", "المسرح"],
+    "emotion": ["الفرح", "الحزن", "التشويق", "الضحك"],
+    "entertainment_place": ["السيرك", "المسرح", "السينما", "الحفل"],
+    "ability": ["أتحرك", "أتكلم", "أشعر", "أفكر"],
+    "media": ["السينما", "المسرح", "التلفزيون", "الإذاعة"],
+    "feature": ["وجه", "صوت", "حركة", "لون"]
 }
 
 # 🎭 شخصيات LUKU AI
 CHARACTERS = {
-    "captain": {"name": "الكابتن LUKU ⚓", "style": "شجاع ومغامر"},
-    "professor": {"name": "البروفيسور المجنون 🧪", "style": "علمي ومبدع"},
-    "wizard": {"name": "الساحر LUKU 🎩", "style": "سحري وغامض"},
-    "host": {"name": "المذيع LUKU 🎤", "style": "حماسي ومشجع"}
+    "inventor": {
+        "name": "المخترع LUKU 🧪", 
+        "style": "يبتكر ألغازاً جديدة باستمرار",
+        "greetings": ["أهلاً يا بطل الإبداع! 🎨", "لنبتكر ألغازاً لا تنسى! 💡", "المخترع LUKU في الخدمة! 🔬"]
+    },
+    "detective": {
+        "name": "المحقق LUKU 🕵️", 
+        "style": "يحل الألغاز الغامضة ويبتكر أخرى",
+        "greetings": ["أهلاً بالمحقق العبقري! 🔍", "لغز جديد ينتظر حلك! 🎯", "المحقق LUKU جاهز للتحقيق! 🕵️‍♂️"]
+    },
+    "wizard": {
+        "name": "الساحر LUKU 🎩", 
+        "style": "يحول التعلم إلى سحر وإبداع",
+        "greetings": ["أبراكادابرا! ✨ أهلاً بساحر المعرفة!", "لنحول الألغاز إلى سحر! 🌟", "الساحر LUKU يستعد للعب! 🎪"]
+    }
 }
+
+def generate_dynamic_puzzle(category, level, user_id):
+    """توليد لغز ديناميكي فريد"""
+    
+    # 🎯 توليد بصمة فريدة بناءً على الوقت والمستخدم
+    time_seed = datetime.now().strftime("%Y%m%d%H%M")
+    user_seed = user_id[:8]
+    unique_seed = f"{time_seed}_{user_seed}"
+    
+    # استخدام البصمة لضمان التوزيع العشوائي
+    random.seed(hash(unique_seed) % 10000)
+    
+    if category in PUZZLE_TEMPLATES:
+        template = random.choice(PUZZLE_TEMPLATES[category])
+        
+        # 🎲 ملء القالب بمفردات عشوائية
+        puzzle_text = template
+        for key, values in DYNAMIC_VOCABULARY.items():
+            if f"{{{key}}}" in puzzle_text:
+                puzzle_text = puzzle_text.replace(f"{{{key}}}", random.choice(values))
+        
+        # 🎪 إضافة لمسات إبداعية
+        enhancements = [
+            f"🧩 {puzzle_text}",
+            f"🎯 تحدي {level}: {puzzle_text}",
+            f"🤔 لغز {category}: {puzzle_text}",
+            f"💡 فكر جيداً: {puzzle_text}"
+        ]
+        
+        return random.choice(enhancements)
+    else:
+        return generate_gemini_puzzle(category, level)
+
+def generate_gemini_puzzle(category, level):
+    """استخدام LUKU ai لتوليد ألغاز فريدة عندما يكون متاحاً"""
+    if not GEMINI_API_KEY:
+        # 🎲 ألغاز احتياطية متنوعة
+        backup_puzzles = [
+            f"في عالم {category}، ما هو الشيء الذي يرى كل شيء لكنه لا يتكلم؟ 🤐",
+            f"أنا جزء من {category}، أتغير باستمرار لكنني لا أتحرك، ما أنا؟ 🔄",
+            f"في {category}، ما الذي يملك أسناناً لكنه لا يعض؟ 😁",
+            f"أختصر المسافات في {category} لكنني لا أتحرك، من أكون؟ 📱",
+            f"في {category}، ما الذي يملك قلباً لكنه لا ينبض؟ 💖"
+        ]
+        return random.choice(backup_puzzles)
+    
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        prompt = f"""
+        {DYNAMIC_PROMPT.format(category=category, level=level)}
+        
+        ابتكر لغزاً فريداً في مجال {category} بمستوى صعوبة {level}.
+        يجب أن يكون اللغز:
+        - جديداً تماماً (لا تكرر الألغاز الشهيرة)
+        - مناسباً للمستوى {level}
+        - مكتوباً بالعربية السليمة
+        - ممتعاً ومشوقاً
+        
+        ابدأ مباشرة باللغز بدون أي مقدمات.
+        """
+        
+        response = model.generate_content(prompt)
+        return response.text.strip()
+        
+    except Exception as e:
+        print(f"🎪 خطأ في توليد اللغز: {e}")
+        return "🎲 ها هو لغز ممتع: ما الذي يملك مدناً بلا بيوت، وأنهاراً بلا ماء، وغابات بلا أشجار؟ (الجواب: الخريطة) 🗺️"
 
 def initialize_user_session(user_id):
     """تهيئة جلسة المستخدم الجديدة"""
@@ -102,7 +206,9 @@ def initialize_user_session(user_id):
             'achievements': [],
             'preferences': {},
             'character': random.choice(list(CHARACTERS.keys())),
-            'join_date': datetime.now().isoformat()
+            'join_date': datetime.now().isoformat(),
+            'puzzles_seen': set(),  # 🆕 تتبع الألغاز التي رآها المستخدم
+            'session_puzzles': []   # 🆕 الألغاز في هذه الجلسة
         }
     
     if user_id not in leaderboard:
@@ -112,113 +218,38 @@ def initialize_user_session(user_id):
             'last_active': datetime.now().isoformat()
         }
 
-def get_user_character(user_id):
-    """الحصول على شخصية المستخدم الحالية"""
-    return user_profiles[user_id].get('character', 'captain')
+def get_unique_puzzle_for_user(category, level, user_id):
+    """الحصول على لغز فريد لم يره المستخدم من قبل"""
+    user_profile = user_profiles[user_id]
+    
+    # 🎯 محاولة توليد لغز فريد
+    for attempt in range(5):  # 5 محاولات لتجنب التكرار
+        new_puzzle = generate_dynamic_puzzle(category, level, user_id)
+        
+        # إنشاء بصمة للغز لتجنب التكرار
+        puzzle_hash = hashlib.md5(new_puzzle.encode()).hexdigest()
+        
+        if (puzzle_hash not in user_profile['puzzles_seen'] and 
+            puzzle_hash not in user_profile['session_puzzles']):
+            
+            user_profile['puzzles_seen'].add(puzzle_hash)
+            user_profile['session_puzzles'].append(puzzle_hash)
+            
+            # 🧹 تنظيف الذاكرة إذا أصبحت كبيرة
+            if len(user_profile['puzzles_seen']) > 1000:
+                user_profile['puzzles_seen'] = set(list(user_profile['puzzles_seen'])[-500:])
+            
+            return new_puzzle
+    
+    # 🎲 إذا فشلنا في إيجاد لغز فريد، نعيد واحداً عشوائياً
+    return generate_dynamic_puzzle(category, level, user_id + "_fallback")
 
-def award_points(user_id, points, reason=""):
-    """منح نقاط للمستخدم"""
-    user_profiles[user_id]['points'] += points
-    leaderboard[user_id]['score'] += points
-    
-    # تحديث النشاط
-    leaderboard[user_id]['last_active'] = datetime.now().isoformat()
-    
-    print(f"🎯 {points} points awarded to {user_id} for {reason}")
-
-def check_achievements(user_id, action):
-    """التحقق من الإنجازات المكتسبة"""
-    profile = user_profiles[user_id]
-    new_achievements = []
-    
-    if action == "first_solve" and "first_blood" not in profile['achievements']:
-        new_achievements.append("first_blood")
-        award_points(user_id, 50, "أول إنجاز")
-    
-    if action == "fast_solve" and "speed_demon" not in profile['achievements']:
-        new_achievements.append("speed_demon")
-        award_points(user_id, 100, "إجابة سريعة")
-    
-    if profile['streak'] >= 10 and "perfectionist" not in profile['achievements']:
-        new_achievements.append("perfectionist")
-        award_points(user_id, 200, "تسلسل مثالي")
-    
-    if profile['correct_answers'] >= 50 and "puzzle_master" not in profile['achievements']:
-        new_achievements.append("puzzle_master")
-        award_points(user_id, 500, "سيد الألغاز")
-    
-    # إضافة الإنجازات الجديدة
-    for achievement in new_achievements:
-        profile['achievements'].append(achievement)
-    
-    return new_achievements
-
-def get_funny_response(is_correct, user_id):
-    """إ生成 ردود مضحكة بناءً على الإجابة"""
-    character = get_user_character(user_id)
-    
-    if is_correct:
-        correct_responses = [
-            "واو! إجابة تثير الإعجاب! 🎉 حتى خوارزمياتي تحترمك!",
-            "صحيح! أنت تضرب كرة الألغاز في الشبكة! ⚽",
-            "برافو! 🎊 إجابة تجعل نيوتن يصفق من قبره!",
-            "مذهل! 🚀 كأنك تقرأ أفكاري!",
-            "إجابة صحيحة! 🏆 تستحق وسام الشجاعة الذهنية!"
-        ]
-    else:
-        correct_responses = [
-            "أوه! كادت أن تكون صحيحة... مثل كوب شاي بدون سكر! ☕",
-            "ههه! إجابة مبدعة... لكن خاطئة! 💫 جرب مرة أخرى!",
-            "مثير للإعجاب! لكن الحقيقة في مكان آخر... 🕵️",
-            "كانت محاولة شجاعة! 🤝 الجواب الصحيح قريب منك!",
-            "لا بأس! حتى العباقرة يخطئون! 🌟 جرب مرة أخرى!"
-        ]
-    
-    return random.choice(correct_responses)
-
-def get_gemini_response(message, category="", level="", user_id=""):
-    """الحصول على رد من Gemini AI"""
-    try:
-        if not GEMINI_API_KEY:
-            return get_funny_response(True, user_id) + " (وضع التجربة) 🧩"
-        
-        # استخدام النموذج الصحيح
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
-        except:
-            model = genai.GenerativeModel('gemini-pro')
-        
-        # إعداد الرسالة مع السياق
-        character = get_user_character(user_id)
-        character_info = CHARACTERS[character]
-        
-        prompt = f"""
-        {SYSTEM_PROMPT}
-        
-        الشخصية الحالية: {character_info['name']} - {character_info['style']}
-        المجال: {category}
-        المستوى: {level}
-        المستخدم: {user_id}
-        
-        رسالة المستخدم: {message}
-        
-        قم بالرد بلغة العربية وبأسلوب {character_info['style']}.
-        كن مرحاً وجذاباً وأضف الإيموجيات المناسبة.
-        """
-        
-        response = model.generate_content(prompt)
-        return response.text
-        
-    except Exception as e:
-        print(f"Gemini API Error: {str(e)}")
-        return get_funny_response(False, user_id)
-
-# 🎯 المسارات الرئيسية
+# 🎯 المسارات الرئيسية المحدثة
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
         data = request.get_json()
-        message = data.get('message', '')
+        message = data.get('message', '').strip()
         session_id = data.get('sessionId', 'default')
         category = data.get('category', 'عام')
         level = data.get('level', 'متوسط')
@@ -226,38 +257,74 @@ def chat():
        
         # تهيئة المستخدم
         initialize_user_session(user_id)
-       
+        
         if not message:
             return jsonify({
                 'error': True,
-                'message': 'الرسالة مطلوبة'
+                'message': '🤔 يبدو أنك أرسلت رسالة فارغة! اكتب شيئاً ممتعاً!'
             }), 400
         
-        # الحصول على الرد من Gemini
-        reply = get_gemini_response(message, category, level, user_id)
-        
-        # تحديث إحصائيات المستخدم
-        profile = user_profiles[user_id]
-        profile['total_answers'] += 1
-        
-        # التحقق من الإنجازات
-        new_achievements = check_achievements(user_id, "answer_given")
-        
-        # حفظ في السجل
-        if session_id not in chat_sessions:
+        # 🎪 التحقق إذا كانت الجلسة جديدة
+        is_new_session = session_id not in chat_sessions
+        if is_new_session:
             chat_sessions[session_id] = {
                 'history': [],
                 'category': category,
                 'level': level,
                 'user_id': user_id,
-                'start_time': datetime.now().isoformat()
+                'start_time': datetime.now().isoformat(),
+                'is_first_message': True,
+                'puzzle_count': 0,
+                'current_puzzle': None
             }
         
-        chat_sessions[session_id]['history'].append({
+        session = chat_sessions[session_id]
+        
+        # 🎯 معالجة الرسالة الأولى بشكل خاص
+        if session['is_first_message']:
+            session['is_first_message'] = False
+            session['puzzle_count'] = 1
+            
+            # توليد لغز فريد للمستخدم
+            character = user_profiles[user_id]['character']
+            character_info = CHARACTERS[character]
+            greeting = random.choice(character_info['greetings'])
+            
+            unique_puzzle = get_unique_puzzle_for_user(category, level, user_id)
+            
+            reply = f"{greeting} 🎉\n\n{unique_puzzle}\n\nفكر جيداً وأجب... 🧠"
+            session['current_puzzle'] = reply
+            
+        else:
+            # معالجة الرسائل التالية
+            # هنا يمكن إضافة منطق التحقق من الإجابات
+            # حالياً نولد لغزاً جديداً بعد كل رسالة
+            
+            unique_puzzle = get_unique_puzzle_for_user(category, level, user_id)
+            
+            # ردود متنوعة بعد كل إجابة
+            responses = [
+                f"🎯 إجابة رائعة! ها هو التحدي التالي:\n\n{unique_puzzle}",
+                f"🚀 ممتاز! لنواصل المغامرة:\n\n{unique_puzzle}",
+                f"💡 فكرة جيدة! اللغز الجديد:\n\n{unique_puzzle}",
+                f"🎪 رائع! مستعد للغز التالي؟\n\n{unique_puzzle}"
+            ]
+            
+            reply = random.choice(responses)
+        
+        # تحديث الإحصائيات
+        profile = user_profiles[user_id]
+        profile['total_answers'] += 1
+        
+        # حفظ في السجل
+        session['history'].append({
             'user': message,
             'assistant': reply,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'puzzle_number': session['puzzle_count']
         })
+        
+        session['puzzle_count'] += 1
        
         return jsonify({
             'success': True,
@@ -265,151 +332,55 @@ def chat():
             'sessionId': session_id,
             'userId': user_id,
             'points': profile['points'],
-            'newAchievements': new_achievements,
-            'character': get_user_character(user_id)
+            'puzzleNumber': session['puzzle_count'],
+            'character': character_info['name']
         })
        
     except Exception as err:
-        print("Error in /chat endpoint:", str(err))
+        print("😂 خطأ في المحادثة:", str(err))
         return jsonify({
             'error': True,
-            'message': f'حدث خطأ في الخادم: {str(err)}'
+            'message': f'🎪 حدث خطأ مضحك في الخادم: {str(err)}'
         }), 500
 
-# 🏆 مسارات جديدة للميزات
-@app.route('/user/profile/<user_id>', methods=['GET'])
-def get_user_profile(user_id):
-    """الحصول على ملف المستخدم"""
-    if user_id not in user_profiles:
-        return jsonify({'error': 'المستخدم غير موجود'}), 404
+# 🆕 مسار للحصول على لغز جديد
+@app.route('/puzzle/new', methods=['GET'])
+def get_new_puzzle():
+    """الحصول على لغز جديد فريد"""
+    category = request.args.get('category', 'عام')
+    level = request.args.get('level', 'متوسط')
+    user_id = request.args.get('user_id', f'guest_{random.randint(1000, 9999)}')
     
-    profile = user_profiles[user_id]
-    return jsonify({
-        'success': True,
-        'profile': {
-            'points': profile['points'],
-            'level': profile['level'],
-            'streak': profile['streak'],
-            'correct_answers': profile['correct_answers'],
-            'total_answers': profile['total_answers'],
-            'achievements': [ACHIEVEMENTS[ach] for ach in profile['achievements']],
-            'character': CHARACTERS[profile['character']],
-            'join_date': profile['join_date']
-        }
-    })
-
-@app.route('/leaderboard', methods=['GET'])
-def get_leaderboard():
-    """الحصول على لوحة المتصدرين"""
-    sorted_leaderboard = sorted(leaderboard.items(), key=lambda x: x[1]['score'], reverse=True)[:10]
+    initialize_user_session(user_id)
+    unique_puzzle = get_unique_puzzle_for_user(category, level, user_id)
     
     return jsonify({
         'success': True,
-        'leaderboard': [
-            {
-                'user_id': user_id,
-                'score': data['score'],
-                'rank': idx + 1
-            }
-            for idx, (user_id, data) in enumerate(sorted_leaderboard)
-        ]
+        'puzzle': unique_puzzle,
+        'category': category,
+        'level': level,
+        'message': '🎲 ها هو لغز فريد من نوعه!'
     })
 
-@app.route('/user/change-character/<user_id>', methods=['POST'])
-def change_character(user_id):
-    """تغيير شخصية LUKU AI"""
-    data = request.get_json()
-    new_character = data.get('character', 'captain')
-    
-    if new_character not in CHARACTERS:
-        return jsonify({'error': 'شخصية غير موجودة'}), 400
-    
+# 🆕 مسار لإعادة تعيين ألغاز المستخدم
+@app.route('/user/<user_id>/reset-puzzles', methods=['POST'])
+def reset_user_puzzles(user_id):
+    """إعادة تعيين الألغاز التي رآها المستخدم"""
     if user_id in user_profiles:
-        user_profiles[user_id]['character'] = new_character
-    
-    return jsonify({
-        'success': True,
-        'new_character': CHARACTERS[new_character],
-        'message': f"تم التغيير إلى {CHARACTERS[new_character]['name']}"
-    })
-
-@app.route('/puzzles/random', methods=['GET'])
-def get_random_puzzle():
-    """الحصول على لغز عشوائي"""
-    category = request.args.get('category', random.choice(list(PUZZLE_LIBRARY.keys())))
-    
-    if category in PUZZLE_LIBRARY and PUZZLE_LIBRARY[category]:
-        puzzle = random.choice(PUZZLE_LIBRARY[category])
-        return jsonify({
-            'success': True,
-            'puzzle': puzzle,
-            'category': category
-        })
-    
-    return jsonify({'error': 'لا توجد ألغاز في هذا المجال'}), 404
-
-@app.route('/special-events/current', methods=['GET'])
-def get_current_events():
-    """الحصول على الفعاليات الحالية"""
-    current_date = datetime.now()
-    
-    events = []
-    if current_date.month == 12:  # ديسمبر
-        events.append({
-            'name': 'تحديات عيد الميلاد 🎄',
-            'description': 'ألغاز خاصة بأجواء العيد',
-            'bonus_points': 50
-        })
-    
-    # يمكن إضافة المزيد من الفعاليات
-    
-    return jsonify({
-        'success': True,
-        'events': events
-    })
-
-# المسارات الأساسية
-@app.route('/test-gemini', methods=['GET'])
-def test_gemini():
-    """اختبار اتصال Gemini"""
-    try:
-        if not GEMINI_API_KEY:
-            return jsonify({'success': False, 'message': '❌ GEMINI_API_KEY غير مضبوط'})
-        
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content("قل 'LUKU AI جاهز للمرح!' بالعربية")
+        user_profiles[user_id]['puzzles_seen'] = set()
+        user_profiles[user_id]['session_puzzles'] = []
         
         return jsonify({
             'success': True,
-            'message': '✅ اتصال Gemini ناجح',
-            'response': response.text
+            'message': '🔄 تم إعادة تعيين الألغاز! جاهز لتحديات جديدة! 🎯'
         })
-    except Exception as e:
-        return jsonify({'success': False, 'message': f'❌ فشل الاتصال: {str(e)}'})
-
-@app.route('/')
-def serve_html():
-    """خدمة الموقع الرئيسي"""
-    try:
-        with open('LUKU-AI.html', 'r', encoding='utf-8') as file:
-            html_content = file.read()
-        return html_content
-    except Exception as e:
-        return f"Error loading HTML file: {str(e)}", 500
-
-@app.route('/health')
-def health_check():
-    """فحص حالة الخادم"""
-    return jsonify({
-        'status': '✅ الخادم يعمل',
-        'users_count': len(user_profiles),
-        'sessions_active': len(chat_sessions),
-        'gemini_configured': bool(GEMINI_API_KEY)
-    })
+    
+    return jsonify({'error': 'المستخدم غير موجود'}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 3000))
-    print(f"🚀 Starting Enhanced LUKU AI Server on port {port}")
-    print(f"🎯 Features: Points System, Achievements, Characters, Leaderboard, Special Events")
-    print(f"🔑 Gemini API: {'✅ Ready' if GEMINI_API_KEY else '❌ Missing'}")
+    print(f"🎉 بدء تشغيل خادم LUKU ai الذكي على المنفذ {port}")
+    print(f"🎯 الميزات: ألغاز ديناميكية فريدة، منع التكرار، ذاكرة مستخدم")
+    print(f"🔑 LUKU ai API: {'🎉 جاهز للإبداع' if GEMINI_API_KEY else '🤖 وضع التوليد الذكي'}")
+    print(f"🎊 كل مستخدم سيحصل على ألغاز فريدة! لا مزيد من الملل! 🚀")
     app.run(host='0.0.0.0', port=port, debug=False)
